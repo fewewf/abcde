@@ -2,20 +2,16 @@ import { connect } from "cloudflare:sockets";
 
 // 配置区块
 let 订阅路径 = "test789";
-let 我的UUID = "550e8400-e29b-41d4-a716-446655446300";
+let 我的UUID = "550e8400-e29b-41d4-a086-446655445800";
 let 默认节点名称 = "节点";
 
 let 优选TXT = [
-  "https://raw.githubusercontent.com/ImLTHQ/edge-tunnel/main/SpeedTest/HKG.txt",
-  "https://raw.githubusercontent.com/ImLTHQ/edge-tunnel/main/SpeedTest/KHH.txt",
-  "https://raw.githubusercontent.com/ImLTHQ/edge-tunnel/main/SpeedTest/SIN.txt",
-  "https://raw.githubusercontent.com/ImLTHQ/edge-tunnel/main/SpeedTest/NRT.txt",
-  "https://raw.githubusercontent.com/ImLTHQ/edge-tunnel/main/SpeedTest/SEA.txt",
-  "https://raw.githubusercontent.com/ImLTHQ/edge-tunnel/main/SpeedTest/LHR.txt",
+  "https://raw.githubusercontent.com/dsddr02/ipupdate/refs/heads/main/valid_ips.txt",
+  
 ];
 let 优选列表 = [];
 
-let 反代IP = "ts.hpc.tw";
+let 反代IP = "ts.hpc.tw:443";
 
 let 启用SOCKS5全局反代 = false;
 let SOCKS5账号 = "";
@@ -57,6 +53,11 @@ export default {
         ];
       }
 
+      const { SOCKS5有效, 反代IP有效 } = 测试SOCKS5和反代IP();
+      if (!SOCKS5有效 && !反代IP有效) {
+        优选列表.unshift("127.0.0.1#Socks5或反代IP出错，无法访问CF CDN");
+      }
+
       const 最终订阅路径 = encodeURIComponent(订阅路径);
       switch (url.pathname) {
         case `/${最终订阅路径}`:
@@ -64,11 +65,14 @@ export default {
           const 配置生成器 = {
             v2ray: v2ray配置文件,
             clash: clash配置文件,
-            default: 生成提示界面,
+            default: 提示界面,
           };
           const 工具 = Object.keys(配置生成器).find((工具) => 用户代理.includes(工具));
           const 生成配置 = 配置生成器[工具 || "default"];
-          return 生成配置(访问请求.headers.get("Host"));
+          return new Response(生成配置(访问请求.headers.get("Host")), {
+            status: 200,
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+          });
         default:
           if (伪装网页) {
             url.hostname = 伪装网页;
@@ -76,7 +80,9 @@ export default {
             访问请求 = new Request(url, 访问请求);
             return fetch(访问请求);
           } else {
-            return 生成项目介绍页面();
+            return new Response(生成项目介绍页面(),{
+              status: 200,
+              headers: { "Content-Type": "text/html;charset=utf-8" },});
           }
       }
     } else if (读取我的请求标头 === "websocket") {
@@ -312,44 +318,64 @@ function 字符串转数组(str) {
   return str.split("\n");
 }
 
+function 测试SOCKS5和反代IP() {
+  let SOCKS5有效 = true;
+  let 反代IP有效 = true;
+
+  if (SOCKS5账号) {
+    try {
+      const { 地址, 端口 } = 获取SOCKS5账号(SOCKS5账号);
+      const 测试连接 = connect({ hostname: 地址, port: 端口 });
+      测试连接.opened;
+      测试连接.close();
+    } catch (error) {
+      SOCKS5有效 = false;
+    }
+  } else {
+    SOCKS5有效 = false;
+  }
+
+  if (反代IP) {
+    try {
+      const [反代IP地址, 反代IP端口] = 反代IP.split(":");
+      const 测试连接 = connect({ hostname: 反代IP地址, port: Number(反代IP端口) || 443 });
+      测试连接.opened;
+      测试连接.close();
+    } catch (error) {
+      反代IP有效 = false;
+    }
+  } else {
+    反代IP有效 = false;
+  }
+
+  return { SOCKS5有效, 反代IP有效 };
+}
+
 function 生成项目介绍页面() {
-  const 项目介绍 = `
+  return `
 <title>项目介绍</title>
 <style>
-  body {
-    font-size: 25px;
-  }
+body {
+  font-size: 25px;
+}
 </style>
 <pre>
 <strong>edge-tunnel</strong>
 
-这是一个基于CF平台的脚本,
-用途仅仅是作为代理用于隐藏真实IP, 并非作为绕过防火墙的工具
+这是一个基于CF Pages平台的JavaScript,在天书的基础上进行优化
 <a href="https://github.com/ImLTHQ/edge-tunnel" target="_blank">点我跳转仓库</a>
-</pre>
-`;
 
-  return new Response(项目介绍, {
-    status: 200,
-    headers: { "Content-Type": "text/html;charset=utf-8" },
-  });
+不要想着嫖别人订阅啦, 自己部署一个不香吗?
+
+本项目仅供教育、研究和安全测试目的而设计和开发
+旨在为安全研究人员、学术界人士及技术爱好者提供一个探索和实践网络通信技术的工具
+</pre>
+`
 }
 
 // 订阅页面
-function 生成提示界面() {
-  const 提示界面 = `
-<title>订阅-${订阅路径}</title>
-<style>
-  body {
-    font-size: 25px;
-  }
-</style>
-<strong>请把链接导入clash或v2ray</strong>
-`;
-  return new Response(提示界面, {
-    status: 200,
-    headers: { "Content-Type": "text/html;charset=utf-8" },
-  });
+function 提示界面() {
+  return `请把链接导入clash或v2ray`;
 }
 
 function 处理优选列表(优选列表, hostName) {
@@ -366,18 +392,12 @@ function 处理优选列表(优选列表, hostName) {
 }
 
 function v2ray配置文件(hostName) {
-  const path = encodeURIComponent("/?ed=9999");
   const 节点列表 = 处理优选列表(优选列表, hostName);
-  const 配置内容 = 节点列表
+  return 节点列表
     .map(({ 地址, 端口, 节点名字 }) => {
-      return `vless://${我的UUID}@${地址}:${端口}?encryption=none&security=tls&sni=${hostName}&fp=chrome&type=ws&host=${hostName}&path=${path}#${节点名字}`;
+      return `vless://${我的UUID}@${地址}:${端口}?encryption=none&security=tls&sni=${hostName}&fp=chrome&type=ws&host=${hostName}&path=%2F%3Fed%3D2560#${节点名字}`;
     })
     .join("\n");
-
-  return new Response(配置内容, {
-    status: 200,
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-  });
 }
 
 function clash配置文件(hostName) {
@@ -390,16 +410,16 @@ function clash配置文件(hostName) {
   server: ${地址}
   port: ${端口}
   uuid: ${我的UUID}
-  udp: true
   tls: true
   sni: ${hostName}
   network: ws
   ws-opts:
-    path: "/?ed=9999"
+    path: "/?ed=2560"
     headers:
       Host: ${hostName}
       User-Agent: Chrome`,
         proxyConfig: `    - ${节点名字}`,
+  udp: true
       };
     });
   };
@@ -411,37 +431,286 @@ function clash配置文件(hostName) {
     .map((node) => node.proxyConfig)
     .join("\n");
 
-  const 配置内容 = `
-dns:
+  return `
+
+
+# 匹配进程 always/strict/off
+find-process-mode: strict
+global-client-fingerprint: chrome
+keep-alive-idle: 600
+keep-alive-interval: 30
+
+# 策略组选择和fakeip缓存
+profile:
+  store-selected: true
+  store-fake-ip: true
+  
+# 流量嗅探
+sniffer:
   enable: true
-  nameserver:
-    - 94.140.14.14
-  fallback:
-    - 94.140.15.15
+  sniff:
+    HTTP:
+      ports: [80, 8080-8880]
+      override-destination: true
+    TLS:
+      ports: [443, 8443]
+    QUIC:
+      ports: [443, 8443]
+  force-domain:
+    - +.v2ex.com
+  skip-domain:
+    - "dlg.io.mi.com"
+    - "+.push.apple.com"
+    - "+.apple.com"
+    
+# 代理模式
+tun:
+  enable: true
+  stack: mixed
+  dns-hijack:
+    - "any:53"
+    - "tcp://any:53"
+  auto-route: true
+  auto-redirect: true
+  auto-detect-interface: true
+
 
 proxies:
 ${节点配置}
+
+
 
 proxy-groups:
 - name: 🚀 节点选择
   type: select
   proxies:
-    - ♻️ 延迟优选
-${代理配置}
-- name: ♻️ 延迟优选
-  type: url-test
-  url: https://www.google.com/generate_204
-  interval: 300
-  tolerance: 100
+    
+    - 🔯 香港故转
+    - 🔯 日本故转
+    - ♻️ 香港自动
+    - ♻️ 日本自动
+    - ♻️ 美国自动
+    - 🇭🇰 香港节点
+    - 🇯🇵 日本节点
+    - 🇺🇲 美国节点
+    - 🌐 全部节点
+    - 全球直连
+
+- name: 全球直连
+  type: select
+  proxies:
+    - DIRECT
+    
+
+- name: 🎯 CF规则
+  type: select
+  proxies:
+    - 🚀 节点选择
+    - DIRECT
+
+- name: 🛑 广告拦截
+  type: select
+  proxies:
+    - REJECT
+    - DIRECT
+    - 🚀 节点选择
+
+
+
+- name: 📹 YouTube
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🍀 Google
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🤖 ChatGPT
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 👨🏿‍💻 GitHub
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🐬 OneDrive
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🪟 Microsoft
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🎵 TikTok
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 📲 Telegram
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🎥 NETFLIX
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: ✈️ Speedtest
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 💶 PayPal
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🍎 Apple
+  type: select
+  proxies:
+    - 全球直连
+    - 🚀 节点选择
+
+- name: 🎯 全球直连
+  type: select
+  proxies:
+    - 全球直连
+    - 🚀 节点选择
+
+- name: 🐟 漏网之鱼
+  type: select
+  proxies:
+    - 🚀 节点选择
+
+- name: 🇭🇰 香港节点
+  type: select
+  include-all: true
+  filter: "(?i)港|hk|hongkong|hong kong"
+
+- name: 🇯🇵 日本节点
+  type: select
+  include-all: true
+  filter: "(?i)日|jp|japan"
+
+- name: 🇺🇲 美国节点
+  type: select
+  include-all: true
+  filter: "(?i)美|us|unitedstates|united states"
+
+- name: 🔯 香港故转
+  type: fallback
+  tolerance: 200
+  interval: 3000
   proxies:
 ${代理配置}
+- name: 🔯 日本故转
+  type: fallback
+  include-all: true
+  tolerance: 20
+  interval: 300
+  filter: "(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$"
+
+- name: ♻️ 香港自动
+  type: url-test
+  include-all: true
+  tolerance: 20
+  interval: 300
+  filter: "(?=.*(港|HK|(?i)Hong))^((?!(台|日|韩|新|深|美)).)*$"
+
+- name: ♻️ 日本自动
+  type: url-test
+  include-all: true
+  tolerance: 20
+  interval: 300
+  filter: "(?=.*(日|JP|(?i)Japan))^((?!(港|台|韩|新|美)).)*$"
+
+- name: ♻️ 美国自动
+  type: url-test
+  include-all: true
+  tolerance: 20
+  interval: 300
+  filter: "(?=.*(美|US|(?i)States|America))^((?!(港|台|日|韩|新)).)*$"
+
+
+
+- name: 🌐 全部节点
+  type: select
+  include-all: true
+rule-anchor:
+  ip: &ip {type: http, interval: 86400, behavior: ipcidr, format: mrs}
+  domain: &domain {type: http, interval: 86400, behavior: domain, format: mrs}
+  class: &class {type: http, interval: 86400, behavior: classical, format: text}
+rule-providers:
+  reject-domain:
+    type: http
+    behavior: domain
+    url: "https://raw.githubusercontent.com/dsddr02/ipupdate/refs/heads/main/adblock.list"
+    format: text
+    interval: 86400
+
+  reject-ip:
+    type: http
+    behavior: ipcidr
+    url: "https://raw.githubusercontent.com/ImLTHQ/edge-tunnel/main/ClashRuleSet/reject-ip.list"
+    path: ./ruleset/reject-ip.yaml
+    interval: 86400
+  private_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/private.mrs"}
+  proxylite: {!!merge <<: *class, url: "https://raw.githubusercontent.com/qichiyuhub/rule/refs/heads/master/ProxyLite.list"}
+  ai: { <<: *domain, url: "https://github.com/MetaCubeX/meta-rules-dat/raw/refs/heads/meta/geo/geosite/category-ai-chat-!cn.mrs" }
+  youtube_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/youtube.mrs"}
+  google_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/google.mrs"}
+  github_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/github.mrs"}
+  telegram_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/telegram.mrs"}
+  netflix_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/netflix.mrs"}
+  paypal_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/paypal.mrs"}
+  onedrive_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/onedrive.mrs"}
+  microsoft_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/microsoft.mrs"}
+  apple_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/apple-cn.mrs"}
+  speedtest_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/ookla-speedtest.mrs"}
+  tiktok_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/tiktok.mrs"}
+  gfw_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/gfw.mrs"}
+  geolocation-!cn: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/geolocation-!cn.mrs"}
+  cn_domain: {!!merge <<: *domain, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geosite/cn.mrs"}
+  
+  cn_ip: {!!merge <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/cn.mrs"}
+  google_ip: {!!merge <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/google.mrs"}
+  telegram_ip: {!!merge <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/telegram.mrs"}
+  netflix_ip: {!!merge <<: *ip, url: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta/geo/geoip/netflix.mrs"}
+
 
 rules:
-  - MATCH,🚀 节点选择
-`;
+  
+  - RULE-SET,reject-domain,🛑 广告拦截
+  - RULE-SET,reject-ip,🛑 广告拦截
+  - RULE-SET,private_domain,全球直连
+  - RULE-SET,apple_domain,🍎 Apple
+  - RULE-SET,proxylite,🚀 节点选择
+  - RULE-SET,ai,🤖 ChatGPT
+  - RULE-SET,github_domain,👨🏿‍💻 GitHub
+  - RULE-SET,youtube_domain,📹 YouTube
+  - RULE-SET,google_domain,🍀 Google
+  - RULE-SET,onedrive_domain,🐬 OneDrive
+  - RULE-SET,microsoft_domain,🪟 Microsoft
+  - RULE-SET,tiktok_domain,🎵 TikTok
+  - RULE-SET,speedtest_domain,✈️ Speedtest
+  - RULE-SET,telegram_domain,📲 Telegram
+  - RULE-SET,netflix_domain,🎥 NETFLIX
+  - RULE-SET,paypal_domain,💶 PayPal
+  - RULE-SET,gfw_domain,🚀 节点选择
+  - RULE-SET,geolocation-!cn,🚀 节点选择
+  - RULE-SET,cn_domain,🎯 全球直连
+  - RULE-SET,google_ip,🍀 Google,no-resolve
+  - RULE-SET,netflix_ip,🎥 NETFLIX,no-resolve
+  - RULE-SET,telegram_ip,📲 Telegram,no-resolve
+  - RULE-SET,cn_ip,🎯 全球直连
+  - MATCH,🐟 漏网之鱼
 
-  return new Response(配置内容, {
-    status: 200,
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-  });
+`;
 }
